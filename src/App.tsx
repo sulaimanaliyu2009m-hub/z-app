@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { BrowserRouter, Routes, Route, Link, NavLink } from 'react-router-dom';
 import { 
   Home as HomeIcon, Compass, PlusSquare, MessageSquare, User as UserIcon, 
-  Bot, Sun, Moon, Sparkles, AlertCircle, Radio
+  Bot, Sun, Moon, Sparkles, AlertCircle, Radio, Loader2
 } from 'lucide-react';
 
 import type { Post, User } from './types';
@@ -31,40 +31,59 @@ function AuthScreen({ onSuccess }: { onSuccess: (user: User, token: string) => v
   const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [wakeWarning, setWakeWarning] = useState(false);
-  const timerRef = React.useRef<any>(null);
+  const [showWakingNotice, setShowWakingNotice] = useState(false);
+
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const wakingTimerRef = useRef<any>(null);
+
+  useEffect(() => {
+    // Ping to wake server up immediately when user visits the site
+    api.pingServer();
+  }, []);
 
   const handleCancel = () => {
-    if (timerRef.current) clearTimeout(timerRef.current);
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
     setLoading(false);
-    setWakeWarning(false);
-    setError("Request cancelled.");
+    setShowWakingNotice(false);
+    if (wakingTimerRef.current) clearTimeout(wakingTimerRef.current);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setWakeWarning(false);
+    setLoading(true);
+    setShowWakingNotice(false);
 
-    timerRef.current = setTimeout(() => {
-      setWakeWarning(true);
+    // Show friendly notice if free tier server needs time to spin up
+    wakingTimerRef.current = setTimeout(() => {
+      setShowWakingNotice(true);
     }, 4000);
 
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     try {
-      setLoading(true);
       if (isSignUp) {
-        const data = await api.register({ email, password, username, displayName: displayName || username });
+        const data = await api.register(
+          { email, password, username, displayName: displayName || username },
+          controller.signal
+        );
         onSuccess(data.user, data.token);
       } else {
-        const data = await api.login({ email, password });
+        const data = await api.login({ email, password }, controller.signal);
         onSuccess(data.user, data.token);
       }
     } catch (err: any) {
-      setError(err.message || 'Authentication error');
+      if (err.name !== 'AbortError') {
+        setError(err.message || 'Authentication error.');
+      }
     } finally {
-      if (timerRef.current) clearTimeout(timerRef.current);
+      // Crucial: Always reset loading state so button is never stuck disabled
       setLoading(false);
-      setWakeWarning(false);
+      setShowWakingNotice(false);
+      if (wakingTimerRef.current) clearTimeout(wakingTimerRef.current);
     }
   };
 
@@ -81,14 +100,13 @@ function AuthScreen({ onSuccess }: { onSuccess: (user: User, token: string) => v
         </div>
       )}
 
-      {wakeWarning && loading && (
-        <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 text-amber-500 rounded-xl text-xs flex items-center justify-between gap-2">
-          <span>Waking up the server, this can take up to a minute...</span>
-          <button
-            type="button"
-            onClick={handleCancel}
-            className="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-500 font-semibold rounded-lg text-xs transition"
-          >
+      {showWakingNotice && (
+        <div className="mb-4 p-3 bg-sky-500/10 border border-sky-500/20 text-sky-400 rounded-xl text-xs flex items-center justify-between animate-pulse">
+          <div className="flex items-center gap-2">
+            <Loader2 size={14} className="animate-spin" />
+            <span>Waking up the server, this can take up to a minute...</span>
+          </div>
+          <button onClick={handleCancel} className="text-neutral-400 hover:text-white text-[11px] font-bold underline">
             Cancel
           </button>
         </div>
@@ -142,9 +160,10 @@ function AuthScreen({ onSuccess }: { onSuccess: (user: User, token: string) => v
         <button
           type="submit"
           disabled={loading}
-          className="w-full bg-sky-500 text-white font-bold py-3 rounded-xl text-sm transition hover:bg-sky-600 mt-2"
+          className="w-full bg-sky-500 disabled:opacity-50 text-white font-bold py-3 rounded-xl text-sm transition hover:bg-sky-600 mt-2 flex items-center justify-center gap-2"
         >
-          {loading ? 'Please wait...' : (isSignUp ? 'Sign Up' : 'Log In')}
+          {loading && <Loader2 size={16} className="animate-spin" />}
+          <span>{loading ? (showWakingNotice ? 'Connecting to cloud...' : 'Please wait...') : (isSignUp ? 'Sign Up' : 'Log In')}</span>
         </button>
       </form>
 
@@ -156,7 +175,7 @@ function AuthScreen({ onSuccess }: { onSuccess: (user: User, token: string) => v
 
       <p className="text-center text-xs text-neutral-500 mt-4">
         {isSignUp ? 'Already have an account?' : "Don't have an account?"}{' '}
-        <button onClick={() => setIsSignUp(!isSignUp)} className="text-sky-500 font-bold hover:underline">
+        <button onClick={() => { setIsSignUp(!isSignUp); setError(''); }} className="text-sky-500 font-bold hover:underline">
           {isSignUp ? 'Log In' : 'Sign Up'}
         </button>
       </p>
@@ -221,7 +240,7 @@ export default function App() {
       const realPosts = await api.getFeed();
       setPosts(realPosts);
     } catch (err) {
-      console.warn("Could not load feed", err);
+      console.warn('Could not load feed', err);
     }
   };
 
@@ -247,6 +266,8 @@ export default function App() {
         socket?.off('new_notification');
         socket?.off('new_message');
       };
+    } else {
+      api.pingServer();
     }
   }, [currentUser]);
 
@@ -283,7 +304,7 @@ export default function App() {
         return {
           ...p,
           isLiked,
-          likesCount: isLiked ? (p.likesCount || 0) + 1 : Math.max(0, (p.likesCount || 0) - 1)
+          likesCount: isLiked ? (p.likesCount || 0) + 1 : Math.max(0, (p.likesCount || 0) - 1),
         };
       }
       return p;
@@ -343,13 +364,11 @@ export default function App() {
       <div className={dark ? 'dark' : ''}>
         <div className="min-h-screen bg-white dark:bg-black text-neutral-900 dark:text-neutral-100 flex flex-col relative pb-16">
           
-          {/* Header */}
           <header className="sticky top-0 z-30 h-14 border-b border-neutral-200 dark:border-neutral-800 bg-white/80 dark:bg-black/80 backdrop-blur flex items-center justify-between px-4 max-w-4xl mx-auto w-full">
             <Link to="/" className="text-2xl font-black tracking-tighter">
               Z<span className="text-sky-500">.</span>
             </Link>
 
-            {/* Top Feed Switcher */}
             <div className="flex items-center gap-3 text-xs font-bold">
               <button 
                 onClick={() => setFeedMode('flow')} 

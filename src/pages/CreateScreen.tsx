@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FileText, Image as ImageIcon, Video as VideoIcon, Upload, X, AlertCircle, Loader2, Sparkles, Wand2 } from 'lucide-react';
 import type { Post, PostType, AiCaptionResponse } from '../types';
@@ -11,13 +11,17 @@ export function CreateScreen({ onPostCreated }: { onPostCreated: (p: Post) => vo
   const [mediaData, setMediaData] = useState<string>('');
   const [thumbnailUrl, setThumbnailUrl] = useState<string>('');
   const [error, setError] = useState('');
-  
+
+  // Configurable limits fetched from backend
+  const [maxDurationSec, setMaxDurationSec] = useState(300);
+  const [maxSizeMb, setMaxSizeMb] = useState(100);
+
   // Video Pipeline States
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [processingStatus, setProcessingStatus] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Gemini AI Assistant States
+  // AI Assistant States
   const [showAiAssistant, setShowAiAssistant] = useState(false);
   const [aiPrompt, setAiPrompt] = useState('');
   const [isGeneratingAi, setIsGeneratingAi] = useState(false);
@@ -25,16 +29,23 @@ export function CreateScreen({ onPostCreated }: { onPostCreated: (p: Post) => vo
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    api.getVideoLimits().then((limits) => {
+      if (limits.maxVideoSeconds) setMaxDurationSec(limits.maxVideoSeconds);
+      if (limits.maxVideoMb) setMaxSizeMb(limits.maxVideoMb);
+    });
+  }, []);
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setError('');
 
-    // 100 MB Limit
-    const MAX_SIZE = 100 * 1024 * 1024;
-    if (file.size > MAX_SIZE) {
-      setError(`File size is too large (${(file.size / (1024 * 1024)).toFixed(1)} MB). Maximum limit is 100 MB.`);
+    // 1. File Size Validation
+    const maxBytes = maxSizeMb * 1024 * 1024;
+    if (file.size > maxBytes) {
+      setError(`File size is ${(file.size / (1024 * 1024)).toFixed(1)} MB. Maximum allowed is ${maxSizeMb} MB.`);
       return;
     }
 
@@ -43,27 +54,30 @@ export function CreateScreen({ onPostCreated }: { onPostCreated: (p: Post) => vo
       reader.onload = () => setMediaData(reader.result as string);
       reader.readAsDataURL(file);
     } else if (postType === 'video') {
+      // 2. Client Duration Validation (No minimum; allows 1s+ videos up to maxDurationSec)
       const tempVideo = document.createElement('video');
       tempVideo.preload = 'metadata';
       tempVideo.src = URL.createObjectURL(file);
 
       tempVideo.onloadedmetadata = async () => {
         window.URL.revokeObjectURL(tempVideo.src);
-        if (tempVideo.duration > 60.5) {
-          setError(`Video duration is ${Math.round(tempVideo.duration)}s. Maximum allowed length is 60 seconds.`);
+        const duration = tempVideo.duration;
+
+        if (duration > maxDurationSec + 1) {
+          setError(`Video duration is ${Math.round(duration)}s. Maximum allowed is ${Math.round(maxDurationSec / 60)} minutes.`);
           return;
         }
 
         try {
           setUploadProgress(0);
-          setProcessingStatus('Requesting signed URL...');
+          setProcessingStatus('Requesting secure upload authorization...');
           const { uploadUrl, videoId } = await api.getVideoUploadUrl(file.type || 'video/mp4', file.size);
 
-          setProcessingStatus('Uploading to S3...');
+          setProcessingStatus('Uploading video...');
           await api.uploadToS3(uploadUrl, file, (percent) => setUploadProgress(percent));
 
           setUploadProgress(100);
-          setProcessingStatus('FFmpeg transcoding & generating thumbnail...');
+          setProcessingStatus('Transcoding video & generating thumbnail...');
           await api.processVideo(videoId);
 
           const interval = setInterval(async () => {
@@ -77,7 +91,7 @@ export function CreateScreen({ onPostCreated }: { onPostCreated: (p: Post) => vo
                 setUploadProgress(null);
               } else if (res.status === 'failed') {
                 clearInterval(interval);
-                setError(res.error_message || 'Transcoding failed');
+                setError(res.error_message || 'Video processing failed.');
                 setProcessingStatus(null);
                 setUploadProgress(null);
               }
@@ -86,10 +100,9 @@ export function CreateScreen({ onPostCreated }: { onPostCreated: (p: Post) => vo
               setProcessingStatus(null);
               setUploadProgress(null);
             }
-          }, 2500);
-
+          }, 2000);
         } catch (err: any) {
-          setError(err.message || 'Video upload pipeline failed');
+          setError(err.message || 'Video upload failed. Check server storage configuration.');
           setProcessingStatus(null);
           setUploadProgress(null);
         }
@@ -113,7 +126,7 @@ export function CreateScreen({ onPostCreated }: { onPostCreated: (p: Post) => vo
   };
 
   const handleApplyCaption = (caption: string) => {
-    const tags = (aiSuggestions?.hashtags || []).map(t => `#${t.replace(/^#/, '')}`).join(' ');
+    const tags = (aiSuggestions?.hashtags || []).map((t) => `#${t.replace(/^#/, '')}`).join(' ');
     setContent(`${caption} ${tags}`.trim());
   };
 
@@ -130,7 +143,7 @@ export function CreateScreen({ onPostCreated }: { onPostCreated: (p: Post) => vo
         type: postType,
         content,
         mediaUrl: mediaData || undefined,
-        thumbnailUrl: thumbnailUrl || undefined
+        thumbnailUrl: thumbnailUrl || undefined,
       });
       onPostCreated(post);
       navigate('/');
@@ -140,6 +153,8 @@ export function CreateScreen({ onPostCreated }: { onPostCreated: (p: Post) => vo
       setIsSubmitting(false);
     }
   };
+
+  const durationMinutesLabel = maxDurationSec >= 60 ? `Up to ${Math.round(maxDurationSec / 60)} minutes` : `Up to ${maxDurationSec} seconds`;
 
   return (
     <div className="p-4 space-y-4">
@@ -188,23 +203,25 @@ export function CreateScreen({ onPostCreated }: { onPostCreated: (p: Post) => vo
       <form onSubmit={handleSubmit} className="space-y-3">
         {postType !== 'text' && !mediaData && (
           <div>
-            <input 
+            <input
               ref={fileInputRef}
-              type="file" 
-              accept={postType === 'image' ? "image/*" : "video/*"}
+              type="file"
+              accept={postType === 'image' ? 'image/*' : 'video/*'}
               onChange={handleFileChange}
-              className="hidden" 
+              className="hidden"
             />
-            <div 
+            <div
               onClick={() => fileInputRef.current?.click()}
               className="border-2 border-dashed border-neutral-300 dark:border-neutral-700 hover:border-sky-500 rounded-2xl p-6 flex flex-col items-center justify-center cursor-pointer transition text-center bg-neutral-50 dark:bg-neutral-900/50"
             >
               <Upload size={28} className="text-sky-500 mb-2" />
               <p className="text-xs font-bold text-neutral-800 dark:text-neutral-200">
-                Choose {postType === 'image' ? 'photo' : 'video'} from your device
+                Choose {postType === 'image' ? 'photo' : 'video'} file
               </p>
               <p className="text-[10px] text-neutral-400 mt-1">
-                {postType === 'video' ? 'Limit: 100 MB and 60 seconds (Auto-transcoded to MP4)' : 'PNG, JPG, WEBP'}
+                {postType === 'video'
+                  ? `${durationMinutesLabel} · Up to ${maxSizeMb} MB`
+                  : 'PNG, JPG, WEBP'}
               </p>
             </div>
           </div>
@@ -217,7 +234,10 @@ export function CreateScreen({ onPostCreated }: { onPostCreated: (p: Post) => vo
               <span>{uploadProgress}%</span>
             </div>
             <div className="h-2 w-full bg-neutral-200 dark:bg-neutral-800 rounded-full overflow-hidden">
-              <div className="h-full bg-sky-500 transition-all duration-150" style={{ width: `${uploadProgress}%` }} />
+              <div
+                className="h-full bg-sky-500 transition-all duration-150"
+                style={{ width: `${uploadProgress}%` }}
+              />
             </div>
           </div>
         )}
@@ -232,14 +252,11 @@ export function CreateScreen({ onPostCreated }: { onPostCreated: (p: Post) => vo
         {mediaData && (
           <div className="relative rounded-xl overflow-hidden border border-neutral-200 dark:border-neutral-800 bg-black max-h-60 flex flex-col items-center justify-center">
             {postType === 'image' && <img src={mediaData} alt="preview" className="w-full max-h-56 object-contain" />}
-            {postType === 'video' && <video src={mediaData} controls className="w-full max-h-56 object-contain" />}
-            {thumbnailUrl && (
-              <div className="absolute bottom-2 left-2 bg-black/70 backdrop-blur px-2 py-0.5 rounded text-[10px] text-sky-400 font-semibold">
-                ✓ FFmpeg Thumbnail Ready
-              </div>
+            {postType === 'video' && (
+              <video src={mediaData} controls className="w-full max-h-56 object-contain" />
             )}
-            <button 
-              type="button" 
+            <button
+              type="button"
               onClick={() => { setMediaData(''); setThumbnailUrl(''); }}
               className="absolute top-2 right-2 p-1.5 bg-black/70 hover:bg-black text-white rounded-full"
             >
@@ -248,7 +265,7 @@ export function CreateScreen({ onPostCreated }: { onPostCreated: (p: Post) => vo
           </div>
         )}
 
-        {/* Gemini AI Caption & Hashtag Assistant */}
+        {/* AI Caption Generator */}
         <div className="p-3 bg-neutral-100 dark:bg-neutral-900/60 border border-neutral-200 dark:border-neutral-800 rounded-2xl space-y-2.5">
           <button
             type="button"
@@ -256,7 +273,7 @@ export function CreateScreen({ onPostCreated }: { onPostCreated: (p: Post) => vo
             className="w-full flex items-center justify-between text-xs font-bold text-sky-500"
           >
             <span className="flex items-center gap-1.5">
-              <Sparkles size={15} /> Gemini AI Caption & Tag Generator
+              <Sparkles size={15} /> AI Caption & Tag Generator
             </span>
             <span className="text-[10px] text-neutral-400">{showAiAssistant ? 'Hide' : 'Open'}</span>
           </button>
@@ -266,7 +283,7 @@ export function CreateScreen({ onPostCreated }: { onPostCreated: (p: Post) => vo
               <div className="flex gap-2">
                 <input
                   type="text"
-                  placeholder="Describe your post or topic (e.g. Kali CTF victory, AI demo)..."
+                  placeholder="Describe your post topic..."
                   value={aiPrompt}
                   onChange={(e) => setAiPrompt(e.target.value)}
                   className="flex-1 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl px-3 py-1.5 text-xs outline-none focus:border-sky-500"
@@ -285,7 +302,7 @@ export function CreateScreen({ onPostCreated }: { onPostCreated: (p: Post) => vo
               {aiSuggestions && (
                 <div className="space-y-2 pt-1">
                   <div className="space-y-1">
-                    <p className="text-[10px] font-bold text-neutral-400 uppercase">Suggested Captions (Click to use):</p>
+                    <p className="text-[10px] font-bold text-neutral-400 uppercase">Suggested Captions (Tap to use):</p>
                     {aiSuggestions.captions?.map((c, i) => (
                       <button
                         key={i}
@@ -324,8 +341,8 @@ export function CreateScreen({ onPostCreated }: { onPostCreated: (p: Post) => vo
           />
         </div>
 
-        <button 
-          type="submit" 
+        <button
+          type="submit"
           disabled={isSubmitting || processingStatus !== null}
           className="w-full bg-sky-500 disabled:opacity-40 text-white font-bold py-3 rounded-xl text-xs hover:bg-sky-600 transition"
         >
