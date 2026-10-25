@@ -229,3 +229,25 @@ export const api = {
     return res.json();
   },
 };
+
+
+export async function apiRequest<T = any>(endpoint: string, options: any = {}): Promise<T> {
+  const base = (import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/$/, "");
+  const url = endpoint.startsWith("http") ? endpoint : `${base}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`;
+  const token = localStorage.getItem("z_token");
+  
+  const headers: Record<string, string> = { ...(options.headers || {}) };
+  if (!headers["Content-Type"] && !(options.body instanceof FormData)) {
+    headers["Content-Type"] = "application/json";
+  }
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  
+  const res = await fetch(url, { ...options, headers });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || `Request failed with status ${res.status}`);
+  }
+  return data as T;
+}

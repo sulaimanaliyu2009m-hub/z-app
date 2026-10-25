@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { apiRequest } from '../services/api';
 import { UserAvatar } from '../components/common/UserAvatar';
-import { UserLink } from '../common/UserLink';
+import { UserLink } from '../components/common/UserLink';
 import { RichText } from '../components/common/RichText';
 import { FollowButton } from '../components/profile/FollowButton';
 import { FollowListModal } from '../components/profile/FollowListModal';
