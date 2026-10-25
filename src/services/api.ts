@@ -245,7 +245,15 @@ export async function apiRequest<T = any>(endpoint: string, options: any = {}): 
   }
   
   const res = await fetch(url, { ...options, headers });
-  const data = await res.json().catch(() => ({}));
+  const text = await res.text();
+  let data: any = {};
+  try {
+    data = JSON.parse(text);
+  } catch {
+    if (!res.ok) {
+      throw new Error(`Server returned status ${res.status} (${res.statusText})`);
+    }
+  }
   if (!res.ok) {
     throw new Error(data.error || `Request failed with status ${res.status}`);
   }
