@@ -191,7 +191,7 @@ export function UserProfileScreen({ currentUser }: { currentUser: User }) {
               </div>
             ))}
           </div>
-        ))
+        )
       ) : (
         <div className="py-16 text-center text-xs text-neutral-500">No {tab} yet.</div>
       )}
