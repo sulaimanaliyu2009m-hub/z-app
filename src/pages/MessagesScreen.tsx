@@ -16,10 +16,7 @@ export function MessagesScreen({ currentUser }: { currentUser: User }) {
   const [imagePreview, setImagePreview] = useState<string>('');
   const [typingUsers, setTypingUsers] = useState<{ [userId: string]: string }>({});
   
-  // Notifications
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-
-  // New Chat Modal
   const [showNewChatModal, setShowNewChatModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
@@ -33,7 +30,6 @@ export function MessagesScreen({ currentUser }: { currentUser: User }) {
 
   const socket = getSocket();
 
-  // Load conversations and notifications
   useEffect(() => {
     loadConversations();
     loadNotifications();
@@ -59,7 +55,13 @@ export function MessagesScreen({ currentUser }: { currentUser: User }) {
 
     socket.on('new_message', (msg: Message) => {
       if (activeConv && msg.conversationId === activeConv.id) {
-        setMessages((prev) => [...prev, msg]);
+        // Prevent duplicate if already added optimistically
+        setMessages((prev) => {
+          if (prev.some(m => m.id === msg.id || (m.text === msg.text && m.senderId === msg.senderId && m.id.startsWith('temp_')))) {
+            return prev.map(m => m.id.startsWith('temp_') && m.text === msg.text ? msg : m);
+          }
+          return [...prev, msg];
+        });
         socket.emit('mark_read', { conversationId: activeConv.id });
       }
       loadConversations();
@@ -87,7 +89,6 @@ export function MessagesScreen({ currentUser }: { currentUser: User }) {
     };
   }, [socket, activeConv]);
 
-  // Load messages when selecting a conversation
   useEffect(() => {
     if (!activeConv) return;
     socket?.emit('join_conversation', activeConv.id);
@@ -110,7 +111,6 @@ export function MessagesScreen({ currentUser }: { currentUser: User }) {
     scrollToBottom();
   }, [messages]);
 
-  // Handle typing indicator
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInputText(e.target.value);
     if (!activeConv || !socket) return;
@@ -123,20 +123,58 @@ export function MessagesScreen({ currentUser }: { currentUser: User }) {
     }, 1500);
   };
 
-  const handleSendMessage = (e: React.FormEvent) => {
+  // Instant Optimistic Message Send (Shows on screen immediately!)
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if ((!inputText.trim() && !imagePreview) || !activeConv || !socket) return;
+    if ((!inputText.trim() && !imagePreview) || !activeConv) return;
 
-    socket.emit('send_message', {
+    const messageText = inputText.trim();
+    const messageImage = imagePreview;
+
+    // 1. Show message on screen INSTANTLY
+    const tempId = 'temp_' + Date.now();
+    const optimisticMsg: Message = {
+      id: tempId,
       conversationId: activeConv.id,
-      text: inputText.trim(),
-      imageUrl: imagePreview || undefined
-    });
+      senderId: currentUser.id,
+      senderUsername: currentUser.username,
+      senderDisplayName: currentUser.displayName,
+      senderAvatar: currentUser.avatarUrl,
+      text: messageText,
+      imageUrl: messageImage || undefined,
+      createdAt: new Date().toISOString()
+    };
 
+    setMessages((prev) => [...prev, optimisticMsg]);
     setInputText('');
     setImagePreview('');
+    scrollToBottom();
+
+    // 2. Send via WebSockets and HTTP API fallback
+    try {
+      if (socket && socket.connected) {
+        socket.emit('send_message', {
+          conversationId: activeConv.id,
+          text: messageText,
+          imageUrl: messageImage || undefined
+        });
+      } else {
+        // Fallback to HTTP if websocket is disconnected
+        const saved = await (api as any).sendMessage(activeConv.id, messageText, messageImage || undefined);
+        setMessages((prev) => prev.map(m => m.id === tempId ? saved : m));
+      }
+    } catch {
+      // Direct HTTP save
+      try {
+        const saved = await (api as any).sendMessage(activeConv.id, messageText, messageImage || undefined);
+        setMessages((prev) => prev.map(m => m.id === tempId ? saved : m));
+      } catch (err) {
+        console.error('Failed to send message', err);
+      }
+    }
+
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    socket.emit('typing', { conversationId: activeConv.id, isTyping: false });
+    socket?.emit('typing', { conversationId: activeConv.id, isTyping: false });
   };
 
   const handleImageFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -169,13 +207,12 @@ export function MessagesScreen({ currentUser }: { currentUser: User }) {
     setGroupTitle('');
     await loadConversations();
     
-    // Open new conversation
     const target = conversations.find(c => c.id === conv.id);
     if (target) setActiveConv(target);
     else loadConversations().then(() => setActiveConv(conv));
   };
 
-  // If in an Active Chat View
+  // Active Chat Screen
   if (activeConv) {
     const otherMembers = (activeConv.members || []).filter((m) => m.id !== currentUser.id);
     const title = activeConv.isGroup
@@ -212,32 +249,38 @@ export function MessagesScreen({ currentUser }: { currentUser: User }) {
 
         {/* Message Stream */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
-          {messages.map((m) => {
-            const isMe = m.senderId === currentUser.id;
-            return (
-              <div key={m.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
-                {activeConv.isGroup && !isMe && (
-                  <span className="text-[10px] text-neutral-400 mb-0.5 ml-1">@{m.senderUsername}</span>
-                )}
-                <div
-                  className={`max-w-[75%] rounded-2xl p-3 text-xs shadow-sm ${
-                    isMe
-                      ? 'bg-sky-500 text-white rounded-br-none'
-                      : 'bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-bl-none text-neutral-900 dark:text-neutral-100'
-                  }`}
-                >
-                  {m.imageUrl && (
-                    <img src={m.imageUrl} alt="attached" className="rounded-xl mb-1.5 max-h-52 w-full object-cover" />
+          {messages.length === 0 ? (
+            <div className="py-12 text-center text-xs text-neutral-500">
+              No messages yet. Send a message to start chatting!
+            </div>
+          ) : (
+            messages.map((m) => {
+              const isMe = m.senderId === currentUser.id;
+              return (
+                <div key={m.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+                  {activeConv.isGroup && !isMe && (
+                    <span className="text-[10px] text-neutral-400 mb-0.5 ml-1">@{m.senderUsername}</span>
                   )}
-                  {m.text && <p className="leading-relaxed break-words">{m.text}</p>}
+                  <div
+                    className={`max-w-[75%] rounded-2xl p-3 text-xs shadow-sm ${
+                      isMe
+                        ? 'bg-sky-500 text-white rounded-br-none'
+                        : 'bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-bl-none text-neutral-900 dark:text-neutral-100'
+                    }`}
+                  >
+                    {m.imageUrl && (
+                      <img src={m.imageUrl} alt="attached" className="rounded-xl mb-1.5 max-h-52 w-full object-cover" />
+                    )}
+                    {m.text && <p className="leading-relaxed break-words">{m.text}</p>}
+                  </div>
+                  <span className="text-[9px] text-neutral-400 mt-1 flex items-center gap-1">
+                    {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {isMe && <CheckCheck size={12} className={m.id.startsWith('temp_') ? 'text-neutral-500' : 'text-sky-400'} />}
+                  </span>
                 </div>
-                <span className="text-[9px] text-neutral-400 mt-1 flex items-center gap-1">
-                  {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  {isMe && <CheckCheck size={12} className="text-sky-400" />}
-                </span>
-              </div>
-            );
-          })}
+              );
+            })
+          )}
           <div ref={messagesEndRef} />
         </div>
 
@@ -279,10 +322,9 @@ export function MessagesScreen({ currentUser }: { currentUser: User }) {
     );
   }
 
-  // Conversation List & Notifications Main View
+  // Conversation List
   return (
     <div className="p-4 space-y-4">
-      {/* Top Tabs Switcher */}
       <div className="flex border-b border-neutral-200 dark:border-neutral-800">
         <button
           onClick={() => setActiveTab('chats')}
@@ -371,7 +413,6 @@ export function MessagesScreen({ currentUser }: { currentUser: User }) {
           )}
         </div>
       ) : (
-        /* Notifications Tab */
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold">Activity</h3>
@@ -413,7 +454,7 @@ export function MessagesScreen({ currentUser }: { currentUser: User }) {
         </div>
       )}
 
-      {/* New Chat & Group Creator Modal */}
+      {/* New Chat Modal */}
       {showNewChatModal && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 w-full max-w-sm rounded-2xl p-5 shadow-2xl space-y-4">
@@ -422,7 +463,6 @@ export function MessagesScreen({ currentUser }: { currentUser: User }) {
               <button onClick={() => setShowNewChatModal(false)}><X size={18} /></button>
             </div>
 
-            {/* Group Toggle */}
             <div className="flex gap-2">
               <button
                 onClick={() => setIsGroupMode(false)}
@@ -452,7 +492,6 @@ export function MessagesScreen({ currentUser }: { currentUser: User }) {
               />
             )}
 
-            {/* Search User Input */}
             <div className="relative">
               <Search size={14} className="absolute left-3 top-3 text-neutral-400" />
               <input
@@ -464,7 +503,6 @@ export function MessagesScreen({ currentUser }: { currentUser: User }) {
               />
             </div>
 
-            {/* Selected recipients pills */}
             {selectedRecipients.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
                 {selectedRecipients.map((r) => (
@@ -478,7 +516,6 @@ export function MessagesScreen({ currentUser }: { currentUser: User }) {
               </div>
             )}
 
-            {/* Search Results List */}
             <div className="max-h-40 overflow-y-auto divide-y divide-neutral-800">
               {searchResults.map((u) => {
                 const isSelected = selectedRecipients.some((r) => r.id === u.id);

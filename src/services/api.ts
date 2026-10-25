@@ -469,3 +469,13 @@ export const api = {
     return res.json();
   },
 };
+
+api.sendMessage = async function(conversationId: string, text: string, imageUrl?: string) {
+  const res = await fetch(`${BASE_URL}/conversations/${conversationId}/messages`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify({ text, imageUrl })
+  });
+  if (!res.ok) throw new Error('Failed to send message');
+  return res.json();
+};
