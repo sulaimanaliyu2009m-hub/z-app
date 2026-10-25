@@ -1,3 +1,4 @@
+import { UserProfilePage } from "./pages/UserProfilePage";
 import React, { useState, useEffect, useRef } from 'react';
 import { BrowserRouter, Routes, Route, Link, NavLink } from 'react-router-dom';
 import { 
@@ -343,6 +344,7 @@ export default function App() {
       <BrowserRouter>
         <div className={dark ? 'dark' : ''}>
           <Routes>
+          <Route path="/u/:username" element={<UserProfilePage />} />
             <Route path="/privacy" element={<PrivacyPolicyScreen />} />
             <Route path="/terms" element={<TermsOfServiceScreen />} />
             <Route path="*" element={<AuthScreen onSuccess={handleAuthSuccess} />} />
