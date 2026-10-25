@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles, Loader2 } from 'lucide-react';
+import { Bot, Send, Sparkles, Loader2, Wand2 } from 'lucide-react';
 import { api } from '../services/api';
 
 export function AiAssistantScreen() {
@@ -41,7 +41,6 @@ export function AiAssistantScreen() {
 
   return (
     <div className="p-4 h-[calc(100vh-140px)] flex flex-col justify-between max-w-md mx-auto">
-      {/* Messages Scroll View */}
       <div className="flex-1 overflow-y-auto space-y-3 pr-1">
         {chat.map((m, i) => (
           <div key={i} className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -59,7 +58,6 @@ export function AiAssistantScreen() {
             </div>
           </div>
         ))}
-
         {isLoading && (
           <div className="flex justify-start">
             <div className="p-3 rounded-2xl bg-neutral-900 border border-neutral-800 text-xs text-neutral-400 flex items-center gap-2">
@@ -71,7 +69,6 @@ export function AiAssistantScreen() {
         <div ref={endRef} />
       </div>
 
-      {/* Suggested Prompt Chips */}
       <div className="py-2 flex gap-1.5 overflow-x-auto no-scrollbar">
         {prompts.map((p, i) => (
           <button
@@ -85,7 +82,6 @@ export function AiAssistantScreen() {
         ))}
       </div>
 
-      {/* Input Form */}
       <form onSubmit={(e) => { e.preventDefault(); handleSend(); }} className="relative mt-1">
         <input 
           type="text"
@@ -95,11 +91,7 @@ export function AiAssistantScreen() {
           disabled={isLoading}
           className="w-full bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 p-3 pr-12 rounded-full text-xs outline-none focus:border-sky-500" 
         />
-        <button 
-          type="submit" 
-          disabled={!input.trim() || isLoading}
-          className="absolute right-2 top-2 bg-sky-500 disabled:opacity-40 p-2 rounded-full text-white"
-        >
+        <button type="submit" disabled={!input.trim() || isLoading} className="absolute right-2 top-2 bg-sky-500 disabled:opacity-40 p-2 rounded-full text-white">
           <Send size={13}/>
         </button>
       </form>

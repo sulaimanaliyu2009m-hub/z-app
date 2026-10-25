@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { BrowserRouter, Routes, Route, Link, NavLink } from 'react-router-dom';
 import { 
   Home as HomeIcon, Compass, PlusSquare, MessageSquare, User as UserIcon, 
-  Bot, Sun, Moon, Sparkles, AlertCircle, Radio
+  Bot, Sun, Moon, Sparkles, AlertCircle, Radio, Loader2, X 
 } from 'lucide-react';
 
 import type { Post, User } from './types';
@@ -225,13 +225,7 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     try {
       const s = localStorage.getItem('z_user_account');
-      if (!s) return null;
-      const parsed = JSON.parse(s);
-      return {
-        ...parsed,
-        followingIds: Array.isArray(parsed?.followingIds) ? parsed.followingIds : [],
-        interests: Array.isArray(parsed?.interests) ? parsed.interests : []
-      };
+      return s ? JSON.parse(s) : null;
     } catch { return null; }
   });
 
@@ -373,40 +367,23 @@ export default function App() {
             </Link>
 
             <div className="flex items-center gap-3 text-xs font-bold">
-              <button 
-                onClick={() => setFeedMode('flow')} 
-                className={`transition ${feedMode === 'flow' ? 'text-sky-500 border-b-2 border-sky-500 pb-0.5' : 'text-neutral-500'}`}
-              >
+              <button onClick={() => setFeedMode('flow')} className={`transition ${feedMode === 'flow' ? 'text-sky-500 border-b-2 border-sky-500 pb-0.5' : 'text-neutral-500'}`}>
                 Feed
               </button>
-              <button 
-                onClick={() => setFeedMode('live')} 
-                className={`transition flex items-center gap-1 ${feedMode === 'live' ? 'text-sky-500 border-b-2 border-sky-500 pb-0.5' : 'text-neutral-500'}`}
-              >
-                <Radio size={13} className="text-red-500 animate-pulse" />
-                Live
+              <button onClick={() => setFeedMode('live')} className={`transition flex items-center gap-1 ${feedMode === 'live' ? 'text-sky-500 border-b-2 border-sky-500 pb-0.5' : 'text-neutral-500'}`}>
+                <Radio size={13} className="text-red-500 animate-pulse" /> Live
               </button>
-              <button 
-                onClick={() => setFeedMode('following')} 
-                className={`transition ${feedMode === 'following' ? 'text-sky-500 border-b-2 border-sky-500 pb-0.5' : 'text-neutral-500'}`}
-              >
+              <button onClick={() => setFeedMode('following')} className={`transition ${feedMode === 'following' ? 'text-sky-500 border-b-2 border-sky-500 pb-0.5' : 'text-neutral-500'}`}>
                 Following
               </button>
-              <button 
-                onClick={() => setFeedMode('foryou')} 
-                className={`flex items-center gap-1 transition ${feedMode === 'foryou' ? 'text-sky-500 border-b-2 border-sky-500 pb-0.5' : 'text-neutral-500'}`}
-              >
+              <button onClick={() => setFeedMode('foryou')} className={`flex items-center gap-1 transition ${feedMode === 'foryou' ? 'text-sky-500 border-b-2 border-sky-500 pb-0.5' : 'text-neutral-500'}`}>
                 <Sparkles size={12} className="text-sky-400" /> For You
               </button>
             </div>
             
             <div className="flex items-center gap-2">
-              <Link 
-                to="/ai" 
-                className="flex items-center gap-1 bg-sky-500/10 text-sky-500 px-3 py-1 rounded-full text-xs font-semibold hover:bg-sky-500/20"
-              >
-                <Bot size={15} />
-                <span>Ask Z</span>
+              <Link to="/ai" className="flex items-center gap-1 bg-sky-500/10 text-sky-500 px-3 py-1 rounded-full text-xs font-semibold hover:bg-sky-500/20">
+                <Bot size={15} /> <span>Ask Z</span>
               </Link>
               <button onClick={() => setDark(!dark)} className="p-2 rounded-full hover:bg-neutral-800 text-neutral-500 transition">
                 {dark ? <Sun size={18}/> : <Moon size={18}/>}
@@ -416,37 +393,15 @@ export default function App() {
 
           <main className="flex-1 w-full max-w-4xl mx-auto flex justify-center">
             <Routes>
-              <Route 
-                path="/" 
-                element={
-                  feedMode === 'live' ? (
-                    <LiveFeedScreen
-                      currentUser={currentUser}
-                      onOpenComments={(p: Post) => setActiveCommentPost(p)}
-                      onOpenShare={(p: Post) => setActiveSharePost(p)}
-                    />
-                  ) : feedMode === 'foryou' ? (
-                    <ForYouFeed 
-                      posts={posts} 
-                      currentUser={currentUser}
-                      onToggleLike={handleLike} 
-                      onToggleFollow={handleToggleFollow}
-                      onOpenComments={(p: Post) => setActiveCommentPost(p)}
-                      onOpenShare={(p: Post) => setActiveSharePost(p)}
-                    />
-                  ) : (
-                    <FlowFeed 
-                      posts={posts} 
-                      currentUser={currentUser}
-                      isFollowingTab={feedMode === 'following'}
-                      onToggleLike={handleLike} 
-                      onToggleFollow={handleToggleFollow}
-                      onOpenComments={(p: Post) => setActiveCommentPost(p)}
-                      onOpenShare={(p: Post) => setActiveSharePost(p)}
-                    />
-                  )
-                } 
-              />
+              <Route path="/" element={
+                feedMode === 'live' ? (
+                  <LiveFeedScreen currentUser={currentUser} onOpenComments={(p: Post) => setActiveCommentPost(p)} onOpenShare={(p: Post) => setActiveSharePost(p)} />
+                ) : feedMode === 'foryou' ? (
+                  <ForYouFeed posts={posts} currentUser={currentUser} onToggleLike={handleLike} onToggleFollow={handleToggleFollow} onOpenComments={(p: Post) => setActiveCommentPost(p)} onOpenShare={(p: Post) => setActiveSharePost(p)} />
+                ) : (
+                  <FlowFeed posts={posts} currentUser={currentUser} isFollowingTab={feedMode === 'following'} onToggleLike={handleLike} onToggleFollow={handleToggleFollow} onOpenComments={(p: Post) => setActiveCommentPost(p)} onOpenShare={(p: Post) => setActiveSharePost(p)} />
+                )
+              } />
               <Route path="/discover" element={<DiscoverScreen user={currentUser} />} />
               <Route path="/create" element={<CreateScreen onPostCreated={handlePostCreated} />} />
               <Route path="/messages" element={<MessagesScreen currentUser={currentUser} />} />
@@ -459,47 +414,22 @@ export default function App() {
             </Routes>
           </main>
 
-          {activeCommentPost && (
-            <CommentsModal
-              post={activeCommentPost}
-              onClose={() => setActiveCommentPost(null)}
-              onAddComment={handleAddComment}
-            />
-          )}
-
-          {activeSharePost && (
-            <ShareModal
-              post={activeSharePost}
-              onClose={() => setActiveSharePost(null)}
-            />
-          )}
+          {activeCommentPost && <CommentsModal post={activeCommentPost} onClose={() => setActiveCommentPost(null)} onAddComment={handleAddComment} />}
+          {activeSharePost && <ShareModal post={activeSharePost} onClose={() => setActiveSharePost(null)} />}
 
           <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto h-16 bg-white/95 dark:bg-black/95 backdrop-blur border-t border-neutral-200 dark:border-neutral-800 flex items-center justify-around z-30">
-            <NavLink to="/" className={({isActive}) => isActive ? "text-sky-500 flex flex-col items-center" : "text-neutral-500 flex flex-col items-center"}>
-              <HomeIcon size={20} /><span className="text-[10px] mt-0.5">Home</span>
-            </NavLink>
-            <NavLink to="/discover" className={({isActive}) => isActive ? "text-sky-500 flex flex-col items-center" : "text-neutral-500 flex flex-col items-center"}>
-              <Compass size={20} /><span className="text-[10px] mt-0.5">Discover</span>
-            </NavLink>
-            <NavLink to="/create" className={({isActive}) => isActive ? "text-sky-500 flex flex-col items-center" : "text-neutral-500 flex flex-col items-center"}>
-              <PlusSquare size={20} /><span className="text-[10px] mt-0.5">Create</span>
-            </NavLink>
+            <NavLink to="/" className={({isActive}) => isActive ? "text-sky-500 flex flex-col items-center" : "text-neutral-500 flex flex-col items-center"}><HomeIcon size={20} /><span className="text-[10px] mt-0.5">Home</span></NavLink>
+            <NavLink to="/discover" className={({isActive}) => isActive ? "text-sky-500 flex flex-col items-center" : "text-neutral-500 flex flex-col items-center"}><Compass size={20} /><span className="text-[10px] mt-0.5">Discover</span></NavLink>
+            <NavLink to="/create" className={({isActive}) => isActive ? "text-sky-500 flex flex-col items-center" : "text-neutral-500 flex flex-col items-center"}><PlusSquare size={20} /><span className="text-[10px] mt-0.5">Create</span></NavLink>
             <NavLink to="/messages" className={({isActive}) => isActive ? "text-sky-500 flex flex-col items-center relative" : "text-neutral-500 flex flex-col items-center relative"}>
               <div className="relative">
                 <MessageSquare size={20} />
-                {unreadBadgeCount > 0 && (
-                  <span className="absolute -top-1 -right-2 bg-red-500 text-white text-[9px] font-bold px-1 rounded-full min-w-[14px] text-center">
-                    {unreadBadgeCount > 99 ? '99+' : unreadBadgeCount}
-                  </span>
-                )}
+                {unreadBadgeCount > 0 && <span className="absolute -top-1 -right-2 bg-red-500 text-white text-[9px] font-bold px-1 rounded-full min-w-[14px] text-center">{unreadBadgeCount > 99 ? '99+' : unreadBadgeCount}</span>}
               </div>
               <span className="text-[10px] mt-0.5">Messages</span>
             </NavLink>
-            <NavLink to="/profile" className={({isActive}) => isActive ? "text-sky-500 flex flex-col items-center" : "text-neutral-500 flex flex-col items-center"}>
-              <UserIcon size={20} /><span className="text-[10px] mt-0.5">Profile</span>
-            </NavLink>
+            <NavLink to="/profile" className={({isActive}) => isActive ? "text-sky-500 flex flex-col items-center" : "text-neutral-500 flex flex-col items-center"}><UserIcon size={20} /><span className="text-[10px] mt-0.5">Profile</span></NavLink>
           </nav>
-
         </div>
       </div>
     </BrowserRouter>
