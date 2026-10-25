@@ -49,11 +49,16 @@ export interface User {
   username: string;
   displayName: string;
   avatarUrl: string;
+  coverUrl?: string;
   bio: string;
+  location?: string;
+  websiteLink?: string;
+  isVerified?: boolean;
   followersCount: number;
   followingCount: number;
   followingIds: string[];
   interests: string[];
+  connectionState?: 'self' | 'friends' | 'following' | 'follow_back' | 'none';
   createdAt: string;
 }
 
@@ -158,7 +163,6 @@ export interface SearchResults {
   hashtags: { tag: string; postCount: number }[];
 }
 
-// AI Feature Models
 export interface AiCaptionResponse {
   captions: string[];
   hashtags: string[];

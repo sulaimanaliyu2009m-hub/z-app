@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Link, NavLink } from 'react-router-dom';
 import { 
   Home as HomeIcon, Compass, PlusSquare, MessageSquare, User as UserIcon, 
-  Bot, Sun, Moon, Sparkles, AlertCircle, Radio, Loader2
+  Bot, Sun, Moon, Sparkles, AlertCircle, Radio
 } from 'lucide-react';
 
 import type { Post, User } from './types';
@@ -21,6 +21,8 @@ import { DiscoverScreen } from './pages/DiscoverScreen';
 import { MessagesScreen } from './pages/MessagesScreen';
 import { AiAssistantScreen } from './pages/AiAssistantScreen';
 import { ProfileScreen } from './pages/ProfileScreen';
+import { UserProfileScreen } from './pages/UserProfileScreen';
+import { EditProfileScreen } from './pages/EditProfileScreen';
 import { PrivacyPolicyScreen, TermsOfServiceScreen } from './pages/LegalPages';
 
 function AuthScreen({ onSuccess }: { onSuccess: (user: User, token: string) => void }) {
@@ -37,14 +39,11 @@ function AuthScreen({ onSuccess }: { onSuccess: (user: User, token: string) => v
   const wakingTimerRef = useRef<any>(null);
 
   useEffect(() => {
-    // Ping to wake server up immediately when user visits the site
     api.pingServer();
   }, []);
 
   const handleCancel = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
+    if (abortControllerRef.current) abortControllerRef.current.abort();
     setLoading(false);
     setShowWakingNotice(false);
     if (wakingTimerRef.current) clearTimeout(wakingTimerRef.current);
@@ -56,7 +55,6 @@ function AuthScreen({ onSuccess }: { onSuccess: (user: User, token: string) => v
     setLoading(true);
     setShowWakingNotice(false);
 
-    // Show friendly notice if free tier server needs time to spin up
     wakingTimerRef.current = setTimeout(() => {
       setShowWakingNotice(true);
     }, 4000);
@@ -80,7 +78,6 @@ function AuthScreen({ onSuccess }: { onSuccess: (user: User, token: string) => v
         setError(err.message || 'Authentication error.');
       }
     } finally {
-      // Crucial: Always reset loading state so button is never stuck disabled
       setLoading(false);
       setShowWakingNotice(false);
       if (wakingTimerRef.current) clearTimeout(wakingTimerRef.current);
@@ -228,7 +225,13 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     try {
       const s = localStorage.getItem('z_user_account');
-      return s ? JSON.parse(s) : null;
+      if (!s) return null;
+      const parsed = JSON.parse(s);
+      return {
+        ...parsed,
+        followingIds: Array.isArray(parsed?.followingIds) ? parsed.followingIds : [],
+        interests: Array.isArray(parsed?.interests) ? parsed.interests : []
+      };
     } catch { return null; }
   });
 
@@ -447,17 +450,9 @@ export default function App() {
               <Route path="/discover" element={<DiscoverScreen user={currentUser} />} />
               <Route path="/create" element={<CreateScreen onPostCreated={handlePostCreated} />} />
               <Route path="/messages" element={<MessagesScreen currentUser={currentUser} />} />
-              <Route 
-                path="/profile" 
-                element={
-                  <ProfileScreen 
-                    user={currentUser} 
-                    posts={posts} 
-                    onUpdateUser={(up: any) => setCurrentUser({ ...currentUser, ...up })} 
-                    onLogout={handleLogout} 
-                  />
-                } 
-              />
+              <Route path="/profile" element={<ProfileScreen user={currentUser} posts={posts} onUpdateUser={(up: any) => setCurrentUser({ ...currentUser, ...up })} onLogout={handleLogout} />} />
+              <Route path="/u/:username" element={<UserProfileScreen currentUser={currentUser} />} />
+              <Route path="/profile/edit" element={<EditProfileScreen currentUser={currentUser} onUpdate={(u) => setCurrentUser(u)} />} />
               <Route path="/ai" element={<AiAssistantScreen />} />
               <Route path="/privacy" element={<PrivacyPolicyScreen />} />
               <Route path="/terms" element={<TermsOfServiceScreen />} />
@@ -479,7 +474,6 @@ export default function App() {
             />
           )}
 
-          {/* Bottom Bar */}
           <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto h-16 bg-white/95 dark:bg-black/95 backdrop-blur border-t border-neutral-200 dark:border-neutral-800 flex items-center justify-around z-30">
             <NavLink to="/" className={({isActive}) => isActive ? "text-sky-500 flex flex-col items-center" : "text-neutral-500 flex flex-col items-center"}>
               <HomeIcon size={20} /><span className="text-[10px] mt-0.5">Home</span>

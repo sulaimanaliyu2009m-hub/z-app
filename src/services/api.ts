@@ -479,3 +479,34 @@ api.sendMessage = async function(conversationId: string, text: string, imageUrl?
   if (!res.ok) throw new Error('Failed to send message');
   return res.json();
 };
+
+// --- Profile & Follow System API Extensions ---
+api.getUserProfile = async function(usernameOrId: string) {
+  const res = await fetch(`${BASE_URL}/users/profile/${encodeURIComponent(usernameOrId)}`, { headers: getHeaders() });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || 'Failed to load profile.');
+  return json;
+};
+
+api.updateProfile = async function(data: { displayName?: string; username?: string; bio?: string; avatarUrl?: string; coverUrl?: string; location?: string; websiteLink?: string }) {
+  const res = await fetch(`${BASE_URL}/users/profile`, {
+    method: 'PUT',
+    headers: getHeaders(),
+    body: JSON.stringify(data)
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || 'Failed to update profile.');
+  return json;
+};
+
+api.getFollowers = async function(userId: string) {
+  const res = await fetch(`${BASE_URL}/users/${userId}/followers`, { headers: getHeaders() });
+  if (!res.ok) return [];
+  return res.json();
+};
+
+api.getFollowing = async function(userId: string) {
+  const res = await fetch(`${BASE_URL}/users/${userId}/following`, { headers: getHeaders() });
+  if (!res.ok) return [];
+  return res.json();
+};
