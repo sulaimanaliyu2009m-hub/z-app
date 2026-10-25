@@ -31,10 +31,24 @@ function AuthScreen({ onSuccess }: { onSuccess: (user: User, token: string) => v
   const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [wakeWarning, setWakeWarning] = useState(false);
+  const timerRef = React.useRef<any>(null);
+
+  const handleCancel = () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    setLoading(false);
+    setWakeWarning(false);
+    setError("Request cancelled.");
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setWakeWarning(false);
+
+    timerRef.current = setTimeout(() => {
+      setWakeWarning(true);
+    }, 4000);
 
     try {
       setLoading(true);
@@ -48,7 +62,9 @@ function AuthScreen({ onSuccess }: { onSuccess: (user: User, token: string) => v
     } catch (err: any) {
       setError(err.message || 'Authentication error');
     } finally {
+      if (timerRef.current) clearTimeout(timerRef.current);
       setLoading(false);
+      setWakeWarning(false);
     }
   };
 
@@ -62,6 +78,19 @@ function AuthScreen({ onSuccess }: { onSuccess: (user: User, token: string) => v
       {error && (
         <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl text-xs flex items-center gap-2">
           <AlertCircle size={14} /> <span>{error}</span>
+        </div>
+      )}
+
+      {wakeWarning && loading && (
+        <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 text-amber-500 rounded-xl text-xs flex items-center justify-between gap-2">
+          <span>Waking up the server, this can take up to a minute...</span>
+          <button
+            type="button"
+            onClick={handleCancel}
+            className="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-500 font-semibold rounded-lg text-xs transition"
+          >
+            Cancel
+          </button>
         </div>
       )}
 
