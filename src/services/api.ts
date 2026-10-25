@@ -3,7 +3,7 @@ export const API_ROOT = RAW_API_URL.replace(/\/$/, '');
 const BASE_URL = `${API_ROOT}/api`;
 
 function getHeaders() {
-  const token = localStorage.getItem('z_token');
+  const token = localStorage.getItem('z_token') || localStorage.getItem('token');
   return {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -234,7 +234,7 @@ export const api = {
 export async function apiRequest<T = any>(endpoint: string, options: any = {}): Promise<T> {
   const base = (import.meta.env.VITE_API_URL || "http://localhost:5000").replace(/\/$/, "");
   const url = endpoint.startsWith("http") ? endpoint : `${base}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`;
-  const token = localStorage.getItem("z_token");
+  const token = localStorage.getItem('z_token') || localStorage.getItem('token');
   
   const headers: Record<string, string> = { ...(options.headers || {}) };
   if (!headers["Content-Type"] && !(options.body instanceof FormData)) {
