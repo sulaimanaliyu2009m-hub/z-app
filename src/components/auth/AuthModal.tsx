@@ -77,7 +77,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
       <div className="w-full max-w-md p-6 bg-slate-900 border border-slate-800 text-white rounded-2xl shadow-xl">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-2xl font-bold">{isLogin ? 'Sign In to Z' : 'Create Account'}</h2>
+          <h2 className="text-2xl font-bold">{isLogin ? 'Sign In to Zumeko' : 'Create Account'}</h2>
           <button onClick={onClose} disabled={loading} className="text-slate-400 hover:text-white">✕</button>
         </div>
 

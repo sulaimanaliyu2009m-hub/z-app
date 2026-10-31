@@ -11,7 +11,7 @@ export const Messages: React.FC = () => {
             <h4 className="text-sm font-semibold">Z Assistant Support</h4>
             <span className="text-xs text-neutral-400">12:30 PM</span>
           </div>
-          <p className="text-xs text-neutral-500 truncate">Welcome to Z! Let me know if you need help.</p>
+          <p className="text-xs text-neutral-500 truncate">Welcome to Zumeko! Let me know if you need help.</p>
         </div>
       </div>
     </div>
