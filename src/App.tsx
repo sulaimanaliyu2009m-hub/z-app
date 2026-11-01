@@ -344,6 +344,8 @@ export default function App() {
       <BrowserRouter>
         <div className={dark ? 'dark' : ''}>
           <Routes>
+          <Route path="/u/:username" element={<UserProfileScreen currentUser={currentUser!} />} />
+          <Route path="/profile/edit" element={<EditProfileScreen currentUser={currentUser!} onUpdate={(u) => setCurrentUser(u)} />} />
           <Route path="/u/:username" element={<UserProfilePage />} />
             <Route path="/privacy" element={<PrivacyPolicyScreen />} />
             <Route path="/terms" element={<TermsOfServiceScreen />} />
@@ -395,6 +397,8 @@ export default function App() {
 
           <main className="flex-1 w-full max-w-4xl mx-auto flex justify-center">
             <Routes>
+          <Route path="/u/:username" element={<UserProfileScreen currentUser={currentUser!} />} />
+          <Route path="/profile/edit" element={<EditProfileScreen currentUser={currentUser!} onUpdate={(u) => setCurrentUser(u)} />} />
               <Route path="/" element={
                 feedMode === 'live' ? (
                   <LiveFeedScreen currentUser={currentUser} onOpenComments={(p: Post) => setActiveCommentPost(p)} onOpenShare={(p: Post) => setActiveSharePost(p)} />
