@@ -37,6 +37,14 @@ function getHeaders() {
 }
 
 export const api = {
+  async pingServer() {
+    try {
+      const res = await fetch(`${ROOT_URL}/health`, { method: "GET" });
+      return await res.json().catch(() => ({ status: "ok" }));
+    } catch {
+      return { status: "offline" };
+    }
+  },
   async register(data: any) {
     const res = await resilientFetch(`${BASE_URL}/auth/register`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(data) });
     const json = await res.json();
